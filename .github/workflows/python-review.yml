@@ -119,7 +119,7 @@ jobs:
       - name: Run ruff
         run: |
           ruff check --fix --unsafe-fixes "${{ inputs.src-dir }}" || true
-          ruff format "${{ inputs.src-dir }}"
+          ruff format "${{ inputs.src-dir }}" || true
 
       # ── 8. Commit updated source files ─────────────────────────────────────
       - name: Commit updated source

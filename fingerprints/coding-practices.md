@@ -30,6 +30,8 @@ file provided by the user — fixing violations directly in the code.
 - Use built-in generics (list[str], dict[str, int]) not typing.List / typing.Dict
   (Python 3.10+).
 - Use X | Y union syntax, not Union[X, Y].
+- typing.Any has NO built-in equivalent. NEVER remove `from typing import Any`;
+  keep the import whenever Any appears in signatures or annotations.
 - Use from __future__ import annotations at the top of every module that
   uses annotations, unless already present.
 

@@ -30,6 +30,7 @@ jobs:
           MAJOR="$(echo "$VERSION" | cut -d. -f1)"
           MINOR="$(echo "$VERSION" | cut -d. -f2)"
           BUGFIX="$(echo "$VERSION" | cut -d. -f3)"
+          BUGFIX="${BUGFIX:-0}"   # default to 0 if omitted (e.g. release/1.0)
 
           echo "Branch  : $BRANCH"
           echo "Version : $VERSION  (major=$MAJOR minor=$MINOR bugfix=$BUGFIX)"

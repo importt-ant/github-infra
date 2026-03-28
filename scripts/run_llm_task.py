@@ -68,6 +68,13 @@ REQUEST_DELAY = 4.0
 # write rather than silently corrupt the file.
 TRUNCATION_RATIO = 0.75
 
+# Number of additional attempts after the first failure (delay doubles each time).
+MAX_RETRIES = 2
+
+# Comment written at the top of any file that could not be processed after all
+# retries, so it can be found easily with grep.
+FAILURE_COMMENT = "# LLM-REVIEW-FAILED"
+
 # ── Fingerprint loading ───────────────────────────────────────────────────────
 
 _FRONTMATTER = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
@@ -307,18 +314,40 @@ def run_task(
         print(f"  [{i}/{len(files)}] {rel}", end=" … ", flush=True)
 
         source = path.read_text(encoding="utf-8")
+        last_exc: str = ""
+        result: str | None = None
 
-        try:
-            result = _call_llm(client, model, fp.system_prompt, source, fp.task_name)
+        for attempt in range(MAX_RETRIES + 1):
+            if attempt > 0:
+                delay = REQUEST_DELAY * (2 ** attempt)  # 8 s, 16 s …
+                print(f"    (retry {attempt}/{MAX_RETRIES}, waiting {delay:.0f} s)", flush=True)
+                time.sleep(delay)
 
-            if len(result) < len(source) * TRUNCATION_RATIO:
-                raise RuntimeError(
-                    f"Response is {len(result)} chars but source is {len(source)} chars "
-                    "— likely output truncation. Try a larger output limit or split the file."
-                )
-        except Exception as exc:  # noqa: BLE001
-            print(f"ERROR: {exc}")
-            errors.append((path, str(exc)))
+            try:
+                candidate = _call_llm(client, model, fp.system_prompt, source, fp.task_name)
+
+                if len(candidate) < len(source) * TRUNCATION_RATIO:
+                    raise RuntimeError(
+                        f"Response is {len(candidate)} chars but source is {len(source)} chars "
+                        "— likely output truncation. Try a larger output limit or split the file."
+                    )
+
+                result = candidate
+                break
+
+            except Exception as exc:  # noqa: BLE001
+                last_exc = str(exc)
+
+        if result is None:
+            # All retries exhausted — annotate the file and record the error.
+            print(f"FAILED (annotated): {last_exc}")
+            errors.append((path, last_exc))
+            if not dry_run:
+                comment = f"{FAILURE_COMMENT}: {last_exc}\n"
+                # Prepend the comment only if it is not already there.
+                existing = path.read_text(encoding="utf-8")
+                if not existing.startswith(FAILURE_COMMENT):
+                    path.write_text(comment + existing, encoding="utf-8")
             time.sleep(REQUEST_DELAY)
             continue
 
@@ -429,10 +458,13 @@ def main() -> None:
 
     print(f"Done — {len(total_changed)} file(s) updated, {len(total_errors)} error(s).")
     if total_errors:
-        print("\nErrors:")
+        print("\nErrors (files annotated with LLM-REVIEW-FAILED comment):")
         for p, msg in total_errors:
             print(f"  {p}: {msg}")
-        sys.exit(1)
+        print(
+            "\nTo find annotated files locally run:\n"
+            "  grep -rl 'LLM-REVIEW-FAILED' src/\n"
+        )
 
 
 if __name__ == "__main__":

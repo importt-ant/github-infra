@@ -14,6 +14,11 @@ on:
         default: "gpt-4o-mini"
         required: false
 
+permissions:
+  contents: write
+  pull-requests: write
+  models: read
+
 jobs:
   review:
     uses: {{ github_username }}/github-infra/.github/workflows/python-review.yml@main

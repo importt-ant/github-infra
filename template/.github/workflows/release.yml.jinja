@@ -12,6 +12,11 @@ on:
     branches:
       - "release/**"
 
+permissions:
+  contents: write
+  pull-requests: write
+  models: read
+
 jobs:
   setup:
     name: Parse branch → select tasks

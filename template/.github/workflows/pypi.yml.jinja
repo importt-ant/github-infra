@@ -11,6 +11,10 @@ on:
   release:
     types: [published]
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   pypi:
     uses: {{ github_username }}/github-infra/.github/workflows/python-pypi-publish.yml@main

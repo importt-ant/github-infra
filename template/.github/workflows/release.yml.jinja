@@ -1,0 +1,76 @@
+name: Release Review
+
+# Triggered by branches named release/MAJOR.MINOR.BUGFIX.
+#
+# Decision table:
+#   BUGFIX > 0  →  skip entirely (bugfix releases get no LLM pass)
+#   MINOR  > 0  →  comments + coding-practices
+#   MINOR == 0  →  all tasks (major release: docs + comments + coding-practices)
+#
+on:
+  push:
+    branches:
+      - "release/**"
+
+jobs:
+  setup:
+    name: Parse branch → select tasks
+    runs-on: ubuntu-latest
+    outputs:
+      skip:         {% raw %}${{ steps.parse.outputs.skip }}{% endraw %}
+      release_type: {% raw %}${{ steps.parse.outputs.release_type }}{% endraw %}
+      fingerprints: {% raw %}${{ steps.parse.outputs.fingerprints }}{% endraw %}
+
+    steps:
+      - name: Parse semver from branch name
+        id: parse
+        run: |
+          BRANCH="${GITHUB_REF_NAME}"
+          VERSION="${BRANCH#release/}"
+          MAJOR="$(echo "$VERSION" | cut -d. -f1)"
+          MINOR="$(echo "$VERSION" | cut -d. -f2)"
+          BUGFIX="$(echo "$VERSION" | cut -d. -f3)"
+
+          echo "Branch  : $BRANCH"
+          echo "Version : $VERSION  (major=$MAJOR minor=$MINOR bugfix=$BUGFIX)"
+
+          if [ "$BUGFIX" != "0" ]; then
+            echo "skip=true"           >> "$GITHUB_OUTPUT"
+            echo "release_type=bugfix" >> "$GITHUB_OUTPUT"
+            echo "fingerprints="       >> "$GITHUB_OUTPUT"
+            echo "→ Bugfix release — skipping LLM tasks."
+
+          elif [ "$MINOR" != "0" ]; then
+            echo "skip=false"          >> "$GITHUB_OUTPUT"
+            echo "release_type=minor"  >> "$GITHUB_OUTPUT"
+            {
+              echo 'fingerprints<<EOF'
+              echo 'fingerprints/comments.md'
+              echo 'fingerprints/coding-practices.md'
+              echo 'EOF'
+            } >> "$GITHUB_OUTPUT"
+            echo "→ Minor release — running: comments + coding-practices."
+
+          else
+            echo "skip=false"          >> "$GITHUB_OUTPUT"
+            echo "release_type=major"  >> "$GITHUB_OUTPUT"
+            {
+              echo 'fingerprints<<EOF'
+              echo 'fingerprints/docstrings-numpy.md'
+              echo 'fingerprints/comments.md'
+              echo 'fingerprints/coding-practices.md'
+              echo 'EOF'
+            } >> "$GITHUB_OUTPUT"
+            echo "→ Major release — running: docstrings + comments + coding-practices."
+          fi
+
+  review:
+    name: {% raw %}LLM review (${{ needs.setup.outputs.release_type }}){% endraw %}
+    needs: setup
+    if: {% raw %}needs.setup.outputs.skip == 'false'{% endraw %}
+    uses: {{ github_username }}/github-infra/.github/workflows/python-review.yml@main
+    with:
+      python-version: "{{ min_python }}"
+      fingerprints: {% raw %}${{ needs.setup.outputs.fingerprints }}{% endraw %}
+      run-doc-generator: {% raw %}${{ needs.setup.outputs.release_type == 'major' }}{% endraw %}
+    secrets: inherit

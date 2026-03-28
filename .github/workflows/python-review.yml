@@ -1,0 +1,178 @@
+name: Python — LLM Code Tasks (reusable)
+
+# ── Reusable workflow ─────────────────────────────────────────────────────────
+#
+# Checks out github-infra alongside the calling repo so fingerprint files and
+# the runner script are always sourced from one place.
+#
+# Called from any project repo with:
+#
+#   jobs:
+#     review:
+#       uses: importt-ant/github-infra/.github/workflows/python-review.yml@main
+#       with:
+#         fingerprints: |
+#           fingerprints/docstrings-numpy.md
+#           fingerprints/comments.md
+#       secrets: inherit
+#
+# The paths in `fingerprints` are relative to the github-infra checkout
+# (i.e. relative to .infra/ at runtime).  One path per line.
+#
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        description: "Python version"
+        type: string
+        default: "3.12"
+      fingerprints:
+        description: |
+          Newline-separated list of fingerprint file paths to run, relative to
+          the github-infra repo root.  Example:
+            fingerprints/docstrings-numpy.md
+            fingerprints/comments.md
+        type: string
+        default: "fingerprints/docstrings-numpy.md"
+      src-dir:
+        description: "Source directory to scan (relative to the project root)"
+        type: string
+        default: "src/"
+      base-branch:
+        description: "Git ref to diff against for --changed-only"
+        type: string
+        default: "origin/main"
+      model:
+        description: "GitHub Models model ID"
+        type: string
+        default: "gpt-4o-mini"
+      run-doc-generator:
+        description: "Run generate_docs.py after the LLM pass (if it exists)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  pull-requests: write
+  models: read
+
+jobs:
+  llm-review:
+    name: LLM task runner → open PR
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Checkout project repo ─────────────────────────────────────────────
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ── 2. Checkout github-infra (fingerprints + script) ────────────────────
+      - uses: actions/checkout@v4
+        with:
+          repository: importt-ant/github-infra
+          ref: main
+          path: .infra
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── 3. Python ────────────────────────────────────────────────────────────
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python-version }}
+
+      # ── 4. Dependencies ──────────────────────────────────────────────────────
+      - name: Install dependencies
+        run: |
+          pip install --quiet openai griffe
+          pip install --quiet -e ".[dev]"
+
+      # ── 5. Fetch base branch for diff ────────────────────────────────────────
+      - name: Fetch base branch for diff
+        run: git fetch origin main --no-tags
+
+      # ── 6. Build fingerprint args and run LLM tasks ──────────────────────────
+      #
+      # Converts the multiline `fingerprints` input into --fingerprint flags,
+      # prefixing each path with .infra/ so CLI finds the file in the
+      # secondary checkout.
+      #
+      - name: Run LLM tasks
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FINGERPRINTS: ${{ inputs.fingerprints }}
+        run: |
+          FP_ARGS=""
+          while IFS= read -r fp; do
+            fp="$(echo "$fp" | xargs)"   # trim whitespace
+            [ -z "$fp" ] && continue
+            FP_ARGS="$FP_ARGS --fingerprint .infra/$fp"
+          done <<< "$FINGERPRINTS"
+
+          python .infra/scripts/run_llm_task.py \
+            $FP_ARGS \
+            --src "${{ inputs.src-dir }}" \
+            --model "${{ inputs.model }}" \
+            --changed-only \
+            --base "${{ inputs.base-branch }}"
+
+      # ── 7. Commit updated source files ───────────────────────────────────────
+      - name: Commit updated source
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "${{ inputs.src-dir }}"
+          if git diff --staged --quiet; then
+            echo "No source changes to commit."
+          else
+            git commit -m "chore: LLM task pass — ${{ inputs.fingerprints }} [skip ci]"
+          fi
+
+      # ── 8. Generate Markdown docs (optional) ─────────────────────────────────
+      - name: Generate API reference Markdown
+        if: inputs.run-doc-generator
+        run: python .infra/scripts/generate_docs.py --src "${{ inputs.src-dir }}" --out docs/
+
+      - name: Commit generated docs
+        if: inputs.run-doc-generator
+        run: |
+          git add docs/
+          if git diff --staged --quiet; then
+            echo "No doc output changes to commit."
+          else
+            git commit -m "docs: regenerate API reference Markdown [skip ci]"
+          fi
+
+      # ── 9. Push ──────────────────────────────────────────────────────────────
+      - name: Push changes
+        run: git push
+
+      # ── 10. Open pull request ─────────────────────────────────────────────────
+      - name: Open pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="${GITHUB_REF_NAME}"
+          EXISTING=$(gh pr list --head "$BRANCH" --json url --jq '.[0].url' 2>/dev/null || true)
+
+          if [ -n "$EXISTING" ]; then
+            echo "PR already exists: $EXISTING"
+          else
+            TASK_LIST=$(echo "${{ inputs.fingerprints }}" | sed 's/^/- /')
+            gh pr create \
+              --title "chore: LLM review pass (${BRANCH})" \
+              --body "## Automated review pass
+
+          This PR was opened by the **LLM Code Tasks** workflow.
+
+          ### Tasks run
+          ${TASK_LIST}
+
+          ### Review checklist
+          - [ ] All LLM changes are correct and make sense in context.
+          - [ ] No logic, imports, or type annotations were altered.
+          - [ ] Generated \`docs/\` Markdown looks right (if applicable).
+
+          Merge when satisfied; \`git revert\` any commit that introduced a wrong change." \
+              --base main \
+              --head "$BRANCH"
+          fi

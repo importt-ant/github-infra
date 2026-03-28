@@ -1,0 +1,76 @@
+# Copier template configuration
+# https://copier.readthedocs.io/en/stable/configuring/
+#
+# Apply to a new project:
+#   copier copy gh:importt-ant/github-infra/template <target-dir>
+#
+# Update an existing project (after changes here):
+#   copier update   (run inside the target project)
+
+_subdirectory: template
+
+# ── Repo-level constants (edit here, not per-project) ────────────────────────
+# These are never shown as prompts. Change them once in this file and all
+# projects pick up the new value the next time they run `copier update`.
+
+author_name:
+  type: str
+  default: "Maximilian Todea"
+  when: false
+
+author_email:
+  type: str
+  default: "demon.and.max@gmail.com"
+  when: false
+
+github_username:
+  type: str
+  default: "importt-ant"
+  when: false
+
+# ── Template variables ────────────────────────────────────────────────────────
+
+project_name:
+  type: str
+  help: "PyPI / GitHub repository name (e.g. 'keygen', 'pi-line')"
+
+package_name:
+  type: str
+  help: "Importable package name — no hyphens (e.g. 'keygen', 'piline')"
+  default: "{{ project_name | replace('-', '_') }}"
+
+description:
+  type: str
+  help: "One-line project description for pyproject.toml"
+
+development_status:
+  type: str
+  help: "PyPI development status classifier"
+  choices:
+    - "1 - Planning"
+    - "2 - Pre-Alpha"
+    - "3 - Alpha"
+    - "4 - Beta"
+    - "5 - Production/Stable"
+  default: "3 - Alpha"
+
+min_python:
+  type: str
+  help: "Minimum supported Python version"
+  choices:
+    - "3.10"
+    - "3.11"
+    - "3.12"
+    - "3.13"
+  default: "3.12"
+
+optional_extras:
+  type: yaml
+  help: |-
+    Optional dependency groups as a YAML dict mapping extra name to a list of
+    package requirements.  Leave empty ({}) for none.
+
+    Example:
+      sobol: ["scipy>=1.12"]
+      plot:  ["matplotlib>=3.8", "seaborn"]
+  default: "{}"

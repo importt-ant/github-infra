@@ -1,0 +1,56 @@
+name: Python — Publish to PyPI (reusable)
+
+# ── Reusable workflow ─────────────────────────────────────────────────────────
+#
+# Builds the package and publishes it to PyPI via Trusted Publisher.
+# Intended to run when a GitHub release is published (not drafted).
+#
+# Requires a PyPI Trusted Publisher configured for your project:
+#   https://docs.pypi.org/trusted-publishers/
+#
+# Called from a project repo with:
+#
+#   on:
+#     release:
+#       types: [published]
+#
+#   jobs:
+#     pypi:
+#       uses: importt-ant/github-infra/.github/workflows/python-pypi-publish.yml@main
+#       secrets: inherit
+#
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        description: "Python version to build with"
+        type: string
+        default: "3.12"
+
+permissions:
+  id-token: write   # required for PyPI Trusted Publisher OIDC
+  contents: read
+
+jobs:
+  publish:
+    name: Build and publish to PyPI
+    runs-on: ubuntu-latest
+    environment: pypi   # maps to the PyPI Trusted Publisher environment
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # setuptools-scm reads the full tag history
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python-version }}
+
+      - name: Install build
+        run: pip install build
+
+      - name: Build package
+        run: python -m build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

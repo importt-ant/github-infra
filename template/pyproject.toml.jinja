@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=68.0", "setuptools-scm>=8.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "{{ project_name }}"
+dynamic = ["version"]
+description = "{{ description }}"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">={{ min_python }}"
+authors = [
+    {name = "{{ author_name }}", email = "{{ author_email }}"},
+]
+keywords = []
+classifiers = [
+    "Development Status :: {{ development_status }}",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+{% set _all_python = ["3.10", "3.11", "3.12", "3.13"] %}
+{% for v in _all_python if v >= min_python %}
+    "Programming Language :: Python :: {{ v }}",
+{% endfor %}
+]
+dependencies = []
+
+[project.optional-dependencies]
+{% if optional_extras %}
+{% for extra_name, packages in optional_extras.items() %}
+{{ extra_name }} = [{% for pkg in packages %}"{{ pkg }}"{% if not loop.last %}, {% endif %}{% endfor %}]
+{% endfor %}
+{% endif %}
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+    "ruff>=0.4",
+]
+
+[project.urls]
+Homepage = "https://github.com/{{ github_username }}/{{ project_name }}"
+Repository = "https://github.com/{{ github_username }}/{{ project_name }}"
+Issues = "https://github.com/{{ github_username }}/{{ project_name }}/issues"
+
+[tool.setuptools_scm]
+# version is read from git tags (e.g. v1.0 → 1.0)
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["{{ package_name }}*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py{{ min_python | replace('.', '') }}"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]

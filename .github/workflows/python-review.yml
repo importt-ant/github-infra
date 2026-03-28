@@ -149,8 +149,15 @@ jobs:
           fi
 
       # ── 9. Push ──────────────────────────────────────────────────────────────
+      #
+      # fetch + force-with-lease: handles concurrent runs where an earlier
+      # run already pushed to this branch.  The lease is checked against the
+      # freshly fetched ref, so we never overwrite commits made outside the
+      # Actions context (e.g. a manual push from a different actor).
       - name: Push changes
-        run: git push
+        run: |
+          git fetch origin "${GITHUB_REF_NAME}"
+          git push --force-with-lease
 
       # ── 10. Open pull request ─────────────────────────────────────────────────
       - name: Open pull request

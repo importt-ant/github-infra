@@ -18,19 +18,19 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-{% set _all_python = ["3.10", "3.11", "3.12", "3.13"] %}
-{% for v in _all_python if v >= min_python %}
+{%- set _all_python = ["3.10", "3.11", "3.12", "3.13"] %}
+{%- for v in _all_python if v >= min_python %}
     "Programming Language :: Python :: {{ v }}",
-{% endfor %}
+{%- endfor %}
 ]
 dependencies = []
 
 [project.optional-dependencies]
-{% if optional_extras %}
-{% for extra_name, packages in optional_extras.items() %}
-{{ extra_name }} = [{% for pkg in packages %}"{{ pkg }}"{% if not loop.last %}, {% endif %}{% endfor %}]
-{% endfor %}
-{% endif %}
+{%- if optional_extras %}
+{%- for extra_name, packages in optional_extras.items() %}
+{{ extra_name }} = [{%- for pkg in packages %}"{{ pkg }}"{% if not loop.last %}, {% endif %}{%- endfor %}]
+{%- endfor %}
+{%- endif %}
 dev = [
     "pytest>=7.4",
     "pytest-cov>=4.1",

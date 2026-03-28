@@ -68,6 +68,11 @@ REQUEST_DELAY = 4.0
 # write rather than silently corrupt the file.
 TRUNCATION_RATIO = 0.75
 
+# Files shorter than this (in chars) are never truncated by token limits, so
+# the ratio check is skipped for them entirely.  4 000 output tokens ≈ 16 000
+# chars, but even conservatively a 1 000-char file cannot be cut off mid-way.
+TRUNCATION_MIN_SOURCE_CHARS = 1_000
+
 # Number of additional attempts after the first failure (delay doubles each time).
 MAX_RETRIES = 2
 
@@ -326,7 +331,10 @@ def run_task(
             try:
                 candidate = _call_llm(client, model, fp.system_prompt, source, fp.task_name)
 
-                if len(candidate) < len(source) * TRUNCATION_RATIO:
+                if (
+                    len(source) >= TRUNCATION_MIN_SOURCE_CHARS
+                    and len(candidate) < len(source) * TRUNCATION_RATIO
+                ):
                     raise RuntimeError(
                         f"Response is {len(candidate)} chars but source is {len(source)} chars "
                         "— likely output truncation. Try a larger output limit or split the file."

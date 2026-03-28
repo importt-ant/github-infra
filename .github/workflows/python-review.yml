@@ -115,7 +115,13 @@ jobs:
             --changed-only \
             --base "${{ inputs.base-branch }}"
 
-      # ── 7. Commit updated source files ───────────────────────────────────────
+      # ── 7. Ruff — fix and format (catches LLM-introduced style issues) ───────────
+      - name: Run ruff
+        run: |
+          ruff check --fix --unsafe-fixes "${{ inputs.src-dir }}" || true
+          ruff format "${{ inputs.src-dir }}"
+
+      # ── 8. Commit updated source files ─────────────────────────────────────
       - name: Commit updated source
         run: |
           git config user.name  "github-actions[bot]"

@@ -1,5 +1,5 @@
 ---
-task_name: "Update NumPy docstrings"
+task_name: "Standardize docstrings"
 file_patterns:
   - "*.py"
 ---

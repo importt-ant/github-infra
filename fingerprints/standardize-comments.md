@@ -1,5 +1,5 @@
 ---
-task_name: "Standardize inline comments"
+task_name: "Standardize comments"
 file_patterns:
   - "*.py"
 ---
@@ -16,15 +16,23 @@ source file provided by the user.
 3. If all comments already follow the rules below, return the file unchanged.
 
 ── Comment style rules ───────────────────────────────────────────────────────
-- Every comment must be a complete English sentence: start with a capital letter
-  and end without a period (one-liners) or with a period (multi-sentence blocks).
-- Use plain declarative prose.  Avoid imperative "do X" or "TODO: do X" unless
-  it is a genuine TODO.
+- Write comments in plain lowercase English, like a short message to a friend.
+  Use uppercase only where it is naturally required, such as proper names,
+  class names, constants, acronyms, or other identifiers that are normally
+  capitalized.
+- Keep the tone natural and relaxed, but still clear and specific.
+- If a comment spans multiple clauses or lines, split the ideas with semicolons
+  rather than periods where that reads naturally.
+- Avoid imperative "do X" or "TODO: do X" unless it is a genuine TODO.
 - Comments explain WHY, not WHAT.  Remove comments that merely restate the code
   (e.g. "# increment counter" above "counter += 1").
 - Inline comments must be separated from the code by two spaces: "x = 1  # reason".
+- In classes with clear logical domain splits between methods, add section
+  dividers to group related methods.
 - Section dividers (e.g. "# ── Section name ──────") are acceptable as-is;
-  preserve their style exactly.
+  use this style consistently.
+- If the file already uses multiple divider styles, rewrite them so they all
+  match this exact pattern: "# ── Section name ──────".
 - Remove commented-out dead code unless it contains an explanatory note,
   in which case convert it to a regular comment.
 

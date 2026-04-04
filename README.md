@@ -9,15 +9,26 @@ Copier project template for all `importt-ant` Python packages.
 
 ```
 scripts/
-  run_llm_task.py          ← generic LLM task runner (used by the reusable workflow)
+  run_llm_task/
+    run_llm_task.py        ← llm task entrypoint
+    ...                    ← modular llm-task helpers
+  generate_docs/
+    generate_docs.py       ← docs entrypoint
+    ...                    ← modular doc-generation helpers
 fingerprints/
-  docstrings-numpy.md      ← rewrite docstrings to NumPy style
-  comments.md              ← standardise inline comments
-  coding-practices.md      ← enforce naming, typing, guard-clause conventions
+  standardize-docstrings.md      ← rewrite docstrings to NumPy style
+  standardize-comments.md        ← standardise inline comments
+  standardize-coding-practices.md← enforce naming, typing, guard-clause conventions
 .github/
   workflows/
-    python-publish.yml     ← reusable: test + publish to PyPI
-    python-review.yml      ← reusable: run LLM tasks + open PR
+    dispatch-template-updates.yml ← reusable owner-side tag fan-out
+    prepare-for-release.yml← reusable: orchestrate release cleanup passes
+    run-pytest.yml         ← reusable: run pytest on a chosen ref
+    llm-task.yml           ← reusable: run one fingerprint pass
+    ruff.yml               ← reusable: fix + format
+    generate-docs.yml      ← reusable: regenerate docs/
+    open-pr.yml            ← reusable: open/update the PR
+    publish-to-pypi.yml    ← reusable: publish to PyPI
 template/                  ← Copier project template
 ```
 
@@ -25,59 +36,81 @@ template/                  ← Copier project template
 
 ## Reusable workflows
 
-### `python-publish.yml` — Test & publish to PyPI
+### `publish-to-pypi.yml` — publish a released build to PyPI
 
-Triggered on `v*` tag pushes. Runs tests, builds, publishes via Trusted
-Publisher, and creates a GitHub release.
+Called from the manual release workflow after the GitHub release is created.
+Builds the package and publishes it to PyPI via Trusted Publisher.
 
 ```yaml
-# .github/workflows/publish.yml
-name: Publish to PyPI
-on:
-  push:
-    tags: ["v*"]
+# inside .github/workflows/tag.yml
 jobs:
   publish:
-    uses: importt-ant/github-infra/.github/workflows/python-publish.yml@main
+    uses: importt-ant/github-infra/.github/workflows/publish-to-pypi.yml@main
     with:
-      python-version: "3.12"   # optional
-      install-extras: "dev"    # optional
+      python-version: "3.12"
     secrets: inherit
 ```
 
 ---
 
-### `python-review.yml` — LLM task runner
+### `run-pytest.yml` — reusable release-line test job
 
-Checks out this repo as `.infra/` alongside the calling project, runs
-`scripts/run_llm_task.py` with the fingerprints you specify, commits any
-changes, and opens a PR for review.
+Runs `pytest` for a chosen ref. Use it on every push to `release/**`, and again
+before publishing a release.
+
+```yaml
+jobs:
+  pytest:
+    uses: importt-ant/github-infra/.github/workflows/run-pytest.yml@main
+    with:
+      python-version: "3.12"
+      checkout-ref: release/2.6.34
+    secrets: inherit
+```
+
+  ---
+
+  ### `tag.yml` in templated repos — manual release-and-publish entrypoint
+
+  This is a project-level workflow meant to be triggered manually from the
+  Actions UI while the selected ref is `release/x.y.z`. It:
+
+  1. runs `pytest`
+  2. creates and pushes tag `vX.Y.Z`
+  3. creates the GitHub release
+  4. publishes to PyPI
+  5. opens PRs from `release/x.y.z` into `main` and `dev/x.y`
+
+---
+
+### `prepare-for-release.yml` — release cleanup orchestrator
+
+Calls smaller reusable workflows in sequence: one LLM pass per fingerprint,
+then `ruff`, then docs generation, then PR creation.
 
 The `fingerprints` input is a newline-separated list of paths relative to
 this repo's root. Mix and match any combination:
 
 ```yaml
-# .github/workflows/docs.yml
-name: Generate Documentation
+# .github/workflows/release.yml
+name: Prepare Release Branch
 on:
   push:
-    branches: ["docs/**"]
-  workflow_dispatch:
-    inputs:
-      model:
-        default: "gpt-4o-mini"
+    branches: ["release/**"]
 jobs:
   review:
-    uses: importt-ant/github-infra/.github/workflows/python-review.yml@main
+    uses: importt-ant/github-infra/.github/workflows/prepare-for-release.yml@main
     with:
       python-version: "3.12"
-      model: ${{ github.event.inputs.model || 'gpt-4o-mini' }}
+      source-branch: ${{ github.ref_name }}
+      working-branch: groom/release-${{ github.ref_name }}
+      pr-base-branch: ${{ github.ref_name }}
 
       # Choose which tasks to run — order matters (output of each feeds the next).
       fingerprints: |
-        fingerprints/docstrings-numpy.md
-        fingerprints/comments.md
-        fingerprints/coding-practices.md
+        fingerprints/standardize-docstrings.md
+        fingerprints/standardize-comments.md
+        fingerprints/standardize-coding-practices.md
     secrets: inherit
 ```
 
@@ -85,9 +118,9 @@ jobs:
 
 | Branch / scenario | Fingerprints to use |
 |---|---|
-| Full release (`docs/2.0`) | all three |
-| Minor release (`docs/2.1`) | `coding-practices.md` only |
-| Quick doc fix | `docstrings-numpy.md` only |
+| Full release (`release/2.0.0`) | all three |
+| Minor release (`release/2.1.0`) | `standardize-coding-practices.md` only |
+| Quick doc fix | `standardize-docstrings.md` only |
 
 **Optional inputs:**
 
@@ -97,7 +130,8 @@ jobs:
 | `model` | `gpt-4o-mini` | GitHub Models model ID (free tier) |
 | `src-dir` | `src/` | Source directory to scan |
 | `base-branch` | `origin/main` | Git ref for `--changed-only` diff |
-| `run-doc-generator` | `true` | Run `generate_docs.py` when present |
+| `pr-base-branch` | `main` | Base branch for the pull request |
+| `run-doc-generator` | `true` | Run `scripts/generate_docs/generate_docs.py` |
 
 ---
 
@@ -120,12 +154,18 @@ project's workflow. The runner processes files changed in the PR diff only
 (`--changed-only`), so large repos stay within the GitHub Models free-tier
 rate limits (150 requests/day for `gpt-4o-mini`).
 
+Current built-in fingerprints:
+
+- `fingerprints/standardize-docstrings.md`
+- `fingerprints/standardize-comments.md`
+- `fingerprints/standardize-coding-practices.md`
+
 ---
 
 ## Copier template
 
 Scaffolds a new `importt-ant` Python library with `pyproject.toml`,
-`.gitignore`, and both workflow callers pre-configured.
+`.gitignore`, and branch-oriented workflow callers pre-configured.
 
 ```bash
 pip install copier
@@ -156,4 +196,18 @@ Update an existing project after template changes:
 # inside the project repo
 copier update
 ```
+
+### Automatic template sync on infra tags
+
+Each templated repo can include a `sync-template.yml` workflow that listens for
+the `github-infra-template-update` repository-dispatch event and runs:
+
+```bash
+copier update --trust --defaults --vcs-ref <tag-or-ref>
+```
+
+The owner-side workflow in `github-infra` fans this event out whenever a new
+tag is pushed. To enable that fan-out, add a secret named
+`TEMPLATE_SYNC_TOKEN` to `github-infra` with permission to dispatch workflow
+events to your downstream repositories.
 

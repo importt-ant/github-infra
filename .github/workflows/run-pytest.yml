@@ -1,0 +1,45 @@
+name: Run Pytest
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        description: "Python version to test with"
+        type: string
+        default: "3.12"
+      install-extras:
+        description: "pip extras to install, e.g. 'dev'"
+        type: string
+        default: "dev"
+      checkout-ref:
+        description: "Git ref to test; defaults to the triggering ref"
+        type: string
+        default: ""
+      pytest-command:
+        description: "Command used to run the test suite"
+        type: string
+        default: "pytest"
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    name: Run pytest
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.checkout-ref != '' && inputs.checkout-ref || github.ref_name }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python-version }}
+
+      - name: Install dependencies
+        run: pip install -e ".[${{ inputs.install-extras }}]"
+
+      - name: Run tests
+        run: ${{ inputs.pytest-command }}

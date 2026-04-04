@@ -1,0 +1,151 @@
+name: Sync Template
+
+on:
+  repository_dispatch:
+    types: [github-infra-template-update]
+  workflow_dispatch:
+    inputs:
+      template-ref:
+        description: "Tag or ref from github-infra to apply"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: template-sync
+  cancel-in-progress: false
+
+jobs:
+  sync-template:
+    name: Sync Copier template
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "{{ min_python }}"
+
+      - name: Install copier
+        run: pip install --quiet copier
+
+      - name: Check copier setup
+        id: setup
+        run: |
+          if [ ! -f .copier-answers.yml ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "No .copier-answers.yml found; skipping."
+            exit 0
+          fi
+
+          if ! grep -q 'github-infra' .copier-answers.yml; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "This repo is not initialized from github-infra; skipping."
+            exit 0
+          fi
+
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+
+      - name: Normalize copier source
+        if: steps.setup.outputs.enabled == 'true'
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('.copier-answers.yml')
+          lines = path.read_text(encoding='utf-8').splitlines()
+          updated: list[str] = []
+          changed = False
+
+          for line in lines:
+              if line.startswith('_src_path:'):
+                  desired = '_src_path: gh:{{ github_username }}/github-infra'
+                  updated.append(desired)
+                  changed = changed or line != desired
+              else:
+                  updated.append(line)
+
+          if changed:
+              path.write_text('\n'.join(updated) + '\n', encoding='utf-8')
+          PY
+
+      - name: Resolve template ref
+        if: steps.setup.outputs.enabled == 'true'
+        id: ref
+        env:
+          EVENT_TEMPLATE_REF: {% raw %}${{ github.event.client_payload.template_ref || '' }}{% endraw %}
+          INPUT_TEMPLATE_REF: {% raw %}${{ github.event.inputs['template-ref'] || '' }}{% endraw %}
+        run: |
+          TEMPLATE_REF="${EVENT_TEMPLATE_REF:-$INPUT_TEMPLATE_REF}"
+          TEMPLATE_REF="${TEMPLATE_REF:-main}"
+          SAFE_REF=$(printf '%s' "$TEMPLATE_REF" | tr '/:@ ' '-' | tr -cd '[:alnum:]._-')
+          SAFE_REF="${SAFE_REF:-main}"
+          echo "template_ref=${TEMPLATE_REF}" >> "$GITHUB_OUTPUT"
+          echo "safe_ref=${SAFE_REF}" >> "$GITHUB_OUTPUT"
+
+      - name: Run copier update
+        if: steps.setup.outputs.enabled == 'true'
+        env:
+          TEMPLATE_REF: {% raw %}${{ steps.ref.outputs.template_ref }}{% endraw %}
+        run: |
+          copier update --trust --defaults --vcs-ref "$TEMPLATE_REF"
+
+      - name: Commit and push
+        if: steps.setup.outputs.enabled == 'true'
+        id: commit
+        env:
+          TEMPLATE_REF: {% raw %}${{ steps.ref.outputs.template_ref }}{% endraw %}
+          SAFE_REF: {% raw %}${{ steps.ref.outputs.safe_ref }}{% endraw %}
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "No template changes."
+            echo "branch=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          BRANCH="chore/template-sync-${SAFE_REF}"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git switch -C "$BRANCH"
+          git add -A
+          git commit -m "chore(template): sync github-infra ${TEMPLATE_REF} [skip ci]"
+          git push --force-with-lease origin "$BRANCH"
+          echo "branch=${BRANCH}" >> "$GITHUB_OUTPUT"
+
+      - name: Open pull request
+        if: steps.commit.outputs.branch != ''
+        env:
+          GH_TOKEN: {% raw %}${{ secrets.GITHUB_TOKEN }}{% endraw %}
+          BRANCH: {% raw %}${{ steps.commit.outputs.branch }}{% endraw %}
+          TEMPLATE_REF: {% raw %}${{ steps.ref.outputs.template_ref }}{% endraw %}
+          BASE_BRANCH: {% raw %}${{ github.event.repository.default_branch }}{% endraw %}
+        run: |
+          EXISTING=$(gh pr list --head "$BRANCH" --base "$BASE_BRANCH" --json url --jq '.[0].url' 2>/dev/null || true)
+
+          if [ -n "$EXISTING" ]; then
+            echo "PR already exists: $EXISTING"
+          else
+            BODY=$(cat <<EOF
+          ## Automated template sync
+
+          This PR updates the repository from the latest `github-infra` Copier template ref: `${TEMPLATE_REF}`.
+
+          ### What ran
+          - normalized `.copier-answers.yml` to use the remote template source
+          - ran `copier update --trust --defaults --vcs-ref ${TEMPLATE_REF}`
+
+          Review and merge when the generated changes look correct.
+          EOF
+            )
+            gh pr create \
+              --title "chore(template): sync github-infra ${TEMPLATE_REF}" \
+              --body "$BODY" \
+              --base "$BASE_BRANCH" \
+              --head "$BRANCH"
+          fi

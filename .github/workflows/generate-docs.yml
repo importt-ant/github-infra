@@ -1,0 +1,86 @@
+name: Generate Docs
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        description: "Python version"
+        type: string
+        default: "3.12"
+      src-dir:
+        description: "Source directory to scan (relative to the project root)"
+        type: string
+        default: "src/"
+      source-branch:
+        description: "Branch to treat as the source for the pass"
+        type: string
+        default: ""
+      working-branch:
+        description: "Branch where the automated commits should be written"
+        type: string
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  generate-docs:
+    name: Generate API reference Markdown
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Select working branch
+        env:
+          SOURCE_BRANCH: ${{ inputs.source-branch != '' && inputs.source-branch || github.ref_name }}
+          WORKING_BRANCH: ${{ inputs.working-branch != '' && inputs.working-branch || inputs.source-branch != '' && inputs.source-branch || github.ref_name }}
+        run: |
+          git fetch origin "$SOURCE_BRANCH" --no-tags || true
+          git fetch origin "$WORKING_BRANCH" --no-tags || true
+
+          if git ls-remote --exit-code --heads origin "$WORKING_BRANCH" >/dev/null 2>&1; then
+            git switch -C "$WORKING_BRANCH" "origin/$WORKING_BRANCH"
+          else
+            git switch -C "$WORKING_BRANCH" "origin/$SOURCE_BRANCH"
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          repository: importt-ant/github-infra
+          ref: main
+          path: .infra
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python-version }}
+
+      - name: Install dependencies
+        run: |
+          pip install --quiet griffe
+          pip install --quiet -e ".[dev]"
+
+      - name: Generate API reference Markdown
+        run: python .infra/scripts/generate_docs/generate_docs.py --src "${{ inputs.src-dir }}" --out docs/
+
+      - name: Commit and push
+        env:
+          WORKING_BRANCH: ${{ inputs.working-branch != '' && inputs.working-branch || inputs.source-branch != '' && inputs.source-branch || github.ref_name }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/
+          if git diff --staged --quiet; then
+            echo "No doc changes."
+          else
+            git commit -m "docs: regenerate API reference Markdown [skip ci]"
+            if git ls-remote --exit-code --heads origin "$WORKING_BRANCH" >/dev/null 2>&1; then
+              git fetch origin "$WORKING_BRANCH"
+              git push --force-with-lease origin "$WORKING_BRANCH"
+            else
+              git push --set-upstream origin "$WORKING_BRANCH"
+            fi
+          fi

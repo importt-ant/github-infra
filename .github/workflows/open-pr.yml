@@ -1,0 +1,56 @@
+name: Open PR
+
+on:
+  workflow_call:
+    inputs:
+      fingerprints:
+        description: "Newline-separated list of fingerprint file paths"
+        type: string
+        default: ""
+      head-branch:
+        description: "Head branch for the pull request"
+        type: string
+        default: ""
+      base-branch:
+        description: "Base branch for the pull request"
+        type: string
+        default: "main"
+      title:
+        description: "Pull request title override"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  open-pr:
+    name: Open pull request
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Open pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FINGERPRINTS: ${{ inputs.fingerprints }}
+          HEAD_BRANCH: ${{ inputs.head-branch != '' && inputs.head-branch || github.ref_name }}
+          PR_TITLE: ${{ inputs.title }}
+        run: |
+          EXISTING=$(gh pr list --head "$HEAD_BRANCH" --base "${{ inputs.base-branch }}" --json url --jq '.[0].url' 2>/dev/null || true)
+          TITLE="${PR_TITLE:-chore: LLM review pass (${HEAD_BRANCH})}"
+
+          if [ -n "$EXISTING" ]; then
+            echo "PR already exists: $EXISTING"
+          else
+            TASK_LIST=$(printf '%s\n' "$FINGERPRINTS" | grep -v '^\s*$' | sed 's/^/- /')
+            BODY=$(cat <<EOF
+          ## Automated review pass
+
+          This PR was opened by the **LLM Code Tasks** workflow.
+
+          ### Tasks run
+          ${TASK_LIST}
+          fi

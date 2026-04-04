@@ -1,4 +1,4 @@
-name: Python — Publish to PyPI (reusable)
+name: Publish to PyPI
 
 # ── Reusable workflow ─────────────────────────────────────────────────────────
 #
@@ -16,7 +16,7 @@ name: Python — Publish to PyPI (reusable)
 #
 #   jobs:
 #     pypi:
-#       uses: importt-ant/github-infra/.github/workflows/python-pypi-publish.yml@main
+#       uses: importt-ant/github-infra/.github/workflows/publish-to-pypi.yml@main
 #       secrets: inherit
 #
 on:

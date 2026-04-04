@@ -25,6 +25,9 @@ jobs:
       skip:         {% raw %}${{ steps.parse.outputs.skip }}{% endraw %}
       release_type: {% raw %}${{ steps.parse.outputs.release_type }}{% endraw %}
       fingerprints: {% raw %}${{ steps.parse.outputs.fingerprints }}{% endraw %}
+      version: {% raw %}${{ steps.parse.outputs.version }}{% endraw %}
+      release_branch: {% raw %}${{ steps.parse.outputs.release_branch }}{% endraw %}
+      groom_branch: {% raw %}${{ steps.parse.outputs.groom_branch }}{% endraw %}
 
     steps:
       - name: Parse semver from branch name
@@ -36,6 +39,11 @@ jobs:
           MINOR="$(echo "$VERSION" | cut -d. -f2)"
           BUGFIX="$(echo "$VERSION" | cut -d. -f3)"
           BUGFIX="${BUGFIX:-0}"   # default to 0 if omitted (e.g. release/1.0)
+          GROOM_BRANCH="groom/release-${VERSION}"
+
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "release_branch=${BRANCH}" >> "$GITHUB_OUTPUT"
+          echo "groom_branch=${GROOM_BRANCH}" >> "$GITHUB_OUTPUT"
 
           echo "Branch  : $BRANCH"
           echo "Version : $VERSION  (major=$MAJOR minor=$MINOR bugfix=$BUGFIX)"
@@ -51,8 +59,8 @@ jobs:
             echo "release_type=minor"  >> "$GITHUB_OUTPUT"
             {
               echo 'fingerprints<<EOF'
-              echo 'fingerprints/comments.md'
-              echo 'fingerprints/coding-practices.md'
+              echo 'fingerprints/standardize-comments.md'
+              echo 'fingerprints/standardize-coding-practices.md'
               echo 'EOF'
             } >> "$GITHUB_OUTPUT"
             echo "→ Minor release — running: comments + coding-practices."
@@ -62,21 +70,33 @@ jobs:
             echo "release_type=major"  >> "$GITHUB_OUTPUT"
             {
               echo 'fingerprints<<EOF'
-              echo 'fingerprints/docstrings-numpy.md'
-              echo 'fingerprints/comments.md'
-              echo 'fingerprints/coding-practices.md'
+              echo 'fingerprints/standardize-docstrings.md'
+              echo 'fingerprints/standardize-comments.md'
+              echo 'fingerprints/standardize-coding-practices.md'
               echo 'EOF'
             } >> "$GITHUB_OUTPUT"
             echo "→ Major release — running: docstrings + comments + coding-practices."
           fi
 
-  review:
-    name: {% raw %}LLM review (${{ needs.setup.outputs.release_type }}){% endraw %}
+  pytest:
+    name: Run pytest on release branch
     needs: setup
+    uses: {{ github_username }}/github-infra/.github/workflows/run-pytest.yml@main
+    with:
+      python-version: "{{ min_python }}"
+      checkout-ref: {% raw %}${{ needs.setup.outputs.release_branch }}{% endraw %}
+    secrets: inherit
+
+  review:
+    name: {% raw %}Groom release (${{ needs.setup.outputs.release_type }}){% endraw %}
+    needs: [setup, pytest]
     if: {% raw %}needs.setup.outputs.skip == 'false'{% endraw %}
-    uses: {{ github_username }}/github-infra/.github/workflows/python-review.yml@main
+    uses: {{ github_username }}/github-infra/.github/workflows/prepare-for-release.yml@main
     with:
       python-version: "{{ min_python }}"
       fingerprints: {% raw %}${{ needs.setup.outputs.fingerprints }}{% endraw %}
+      source-branch: {% raw %}${{ needs.setup.outputs.release_branch }}{% endraw %}
+      working-branch: {% raw %}${{ needs.setup.outputs.groom_branch }}{% endraw %}
+      pr-base-branch: {% raw %}${{ needs.setup.outputs.release_branch }}{% endraw %}
       run-doc-generator: {% raw %}${{ needs.setup.outputs.release_type == 'major' }}{% endraw %}
     secrets: inherit

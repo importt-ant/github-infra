@@ -1,5 +1,5 @@
 ---
-task_name: "Enforce coding practices"
+task_name: "Standardize coding practices"
 file_patterns:
   - "*.py"
 ---

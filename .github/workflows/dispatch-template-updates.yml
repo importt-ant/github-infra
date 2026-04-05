@@ -2,12 +2,12 @@ name: Dispatch Template Updates
 
 on:
   push:
-    tags:
-      - "*"
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       template-ref:
-        description: "Tag or ref from github-infra to dispatch to template consumers"
+        description: "Commit SHA or ref from github-infra to dispatch to template consumers"
         required: false
         default: ""
 
@@ -31,5 +31,5 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.TEMPLATE_SYNC_TOKEN }}
           TEMPLATE_OWNER: importt-ant
           TEMPLATE_REPO: importt-ant/github-infra
-          TEMPLATE_REF: ${{ github.event_name == 'push' && github.ref_name || github.event.inputs['template-ref'] || 'main' }}
+          TEMPLATE_REF: ${{ github.event_name == 'push' && github.sha || github.event.inputs['template-ref'] || 'main' }}
         run: python scripts/dispatch_template_updates.py

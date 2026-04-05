@@ -1,10 +1,10 @@
 """Dispatch template-update events to repositories initialized from github-infra.
 
-This script is intended to run in the github-infra repository on tag pushes. It
-finds repositories owned by the configured account that contain a
+This script is intended to run in the github-infra repository after pushes to
+``main``. It finds repositories owned by the configured account that contain a
 ``.copier-answers.yml`` file referencing ``github-infra``, then sends a
 ``repository_dispatch`` event to each one so they can run ``copier update`` in
-repo-local CI.
+repo-local CI against the latest infra commit.
 """
 
 from __future__ import annotations

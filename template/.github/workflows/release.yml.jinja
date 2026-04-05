@@ -1,16 +1,19 @@
-name: Release Review
+name: Prepare Release Branch
 
-# Triggered by branches named release/MAJOR.MINOR.BUGFIX.
-#
-# Decision table:
-#   BUGFIX > 0  →  skip entirely (bugfix releases get no LLM pass)
-#   MINOR  > 0  →  comments + coding-practices
-#   MINOR == 0  →  all tasks (major release: docs + comments + coding-practices)
-#
+# Trigger manually from the Actions UI. The workflow will create
+# release/<version> from the selected dev branch when it does not exist yet,
+# or reuse the existing release branch when it is already present.
 on:
-  push:
-    branches:
-      - "release/**"
+  workflow_dispatch:
+    inputs:
+      dev-branch:
+        description: "Source dev branch to branch from when creating the release branch"
+        required: true
+        default: ""
+      version:
+        description: "Release version without the leading v; used as release/<version>"
+        required: true
+        default: ""
 
 permissions:
   contents: write
@@ -19,78 +22,108 @@ permissions:
 
 jobs:
   setup:
-    name: Parse branch → select tasks
+    name: Parse release inputs
     runs-on: ubuntu-latest
     outputs:
-      skip:         {% raw %}${{ steps.parse.outputs.skip }}{% endraw %}
-      release_type: {% raw %}${{ steps.parse.outputs.release_type }}{% endraw %}
       fingerprints: {% raw %}${{ steps.parse.outputs.fingerprints }}{% endraw %}
       version: {% raw %}${{ steps.parse.outputs.version }}{% endraw %}
+      dev_branch: {% raw %}${{ steps.parse.outputs.dev_branch }}{% endraw %}
       release_branch: {% raw %}${{ steps.parse.outputs.release_branch }}{% endraw %}
       groom_branch: {% raw %}${{ steps.parse.outputs.groom_branch }}{% endraw %}
 
     steps:
-      - name: Parse semver from branch name
+      - name: Parse workflow inputs
         id: parse
         run: |
-          BRANCH="${GITHUB_REF_NAME}"
-          VERSION="${BRANCH#release/}"
-          MAJOR="$(echo "$VERSION" | cut -d. -f1)"
-          MINOR="$(echo "$VERSION" | cut -d. -f2)"
-          BUGFIX="$(echo "$VERSION" | cut -d. -f3)"
-          BUGFIX="${BUGFIX:-0}"   # default to 0 if omitted (e.g. release/1.0)
+          VERSION_INPUT="{% raw %}${{ github.event.inputs.version || '' }}{% endraw %}"
+          DEV_BRANCH="{% raw %}${{ github.event.inputs['dev-branch'] || '' }}{% endraw %}"
+
+          VERSION="${VERSION_INPUT#v}"
+          VERSION="${VERSION#release/}"
+
+          if [ -z "$VERSION" ]; then
+            echo "Version input is required." >&2
+            exit 1
+          fi
+
+          if [ -z "$DEV_BRANCH" ]; then
+            echo "dev-branch input is required." >&2
+            exit 1
+          fi
+
+          RELEASE_BRANCH="release/${VERSION}"
           GROOM_BRANCH="groom/release-${VERSION}"
 
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "release_branch=${BRANCH}" >> "$GITHUB_OUTPUT"
+          echo "dev_branch=${DEV_BRANCH}" >> "$GITHUB_OUTPUT"
+          echo "release_branch=${RELEASE_BRANCH}" >> "$GITHUB_OUTPUT"
           echo "groom_branch=${GROOM_BRANCH}" >> "$GITHUB_OUTPUT"
+          {
+            echo 'fingerprints<<EOF'
+            echo 'fingerprints/standardize-docstrings.md'
+            echo 'fingerprints/standardize-comments.md'
+            echo 'fingerprints/standardize-coding-practices.md'
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
 
-          echo "Branch  : $BRANCH"
-          echo "Version : $VERSION  (major=$MAJOR minor=$MINOR bugfix=$BUGFIX)"
+          echo "Dev branch     : $DEV_BRANCH"
+          echo "Release branch : $RELEASE_BRANCH"
+          echo "Version        : $VERSION"
 
-          if [ "$BUGFIX" != "0" ]; then
-            echo "skip=true"           >> "$GITHUB_OUTPUT"
-            echo "release_type=bugfix" >> "$GITHUB_OUTPUT"
-            echo "fingerprints="       >> "$GITHUB_OUTPUT"
-            echo "→ Bugfix release — skipping LLM tasks."
+  ensure-release-branch:
+    name: Ensure release branch exists
+    needs: setup
+    runs-on: ubuntu-latest
 
-          elif [ "$MINOR" != "0" ]; then
-            echo "skip=false"          >> "$GITHUB_OUTPUT"
-            echo "release_type=minor"  >> "$GITHUB_OUTPUT"
-            {
-              echo 'fingerprints<<EOF'
-              echo 'fingerprints/standardize-comments.md'
-              echo 'fingerprints/standardize-coding-practices.md'
-              echo 'EOF'
-            } >> "$GITHUB_OUTPUT"
-            echo "→ Minor release — running: comments + coding-practices."
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-          else
-            echo "skip=false"          >> "$GITHUB_OUTPUT"
-            echo "release_type=major"  >> "$GITHUB_OUTPUT"
-            {
-              echo 'fingerprints<<EOF'
-              echo 'fingerprints/standardize-docstrings.md'
-              echo 'fingerprints/standardize-comments.md'
-              echo 'fingerprints/standardize-coding-practices.md'
-              echo 'EOF'
-            } >> "$GITHUB_OUTPUT"
-            echo "→ Major release — running: docstrings + comments + coding-practices."
+      - name: Create or reuse release branch
+        env:
+          GH_TOKEN: {% raw %}${{ secrets.GITHUB_TOKEN }}{% endraw %}
+          VERSION: {% raw %}${{ needs.setup.outputs.version }}{% endraw %}
+          DEV_BRANCH: {% raw %}${{ needs.setup.outputs.dev_branch }}{% endraw %}
+          RELEASE_BRANCH: {% raw %}${{ needs.setup.outputs.release_branch }}{% endraw %}
+        run: |
+          if git ls-remote --exit-code --heads origin "refs/heads/${RELEASE_BRANCH}" >/dev/null 2>&1; then
+            echo "Release branch already exists on origin: ${RELEASE_BRANCH}"
+            exit 0
           fi
 
-  pytest:
-    name: Run pytest on release branch
-    needs: setup
-    uses: {{ github_username }}/github-infra/.github/workflows/run-pytest.yml@main
-    with:
-      python-version: "{{ min_python }}"
-      checkout-ref: {% raw %}${{ needs.setup.outputs.release_branch }}{% endraw %}
-    secrets: inherit
+          TAG="v${VERSION}"
+          PR_COUNT=$(gh pr list \
+            --state all \
+            --head "$RELEASE_BRANCH" \
+            --json number \
+            --jq 'length' 2>/dev/null || echo 0)
+
+          if [ "$PR_COUNT" != "0" ]; then
+            echo "Release branch ${RELEASE_BRANCH} appears to have existed before (found ${PR_COUNT} PRs)." >&2
+            echo "Refusing to recreate a deleted or merged release branch." >&2
+            exit 1
+          fi
+
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "Tag ${TAG} already exists; refusing to recreate ${RELEASE_BRANCH}." >&2
+            exit 1
+          fi
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "GitHub release ${TAG} already exists; refusing to recreate ${RELEASE_BRANCH}." >&2
+            exit 1
+          fi
+
+          git fetch origin "$DEV_BRANCH" --no-tags
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git switch -C "$RELEASE_BRANCH" "origin/$DEV_BRANCH"
+          git push origin "$RELEASE_BRANCH"
 
   review:
-    name: {% raw %}Groom release (${{ needs.setup.outputs.release_type }}){% endraw %}
-    needs: [setup, pytest]
-    if: {% raw %}needs.setup.outputs.skip == 'false'{% endraw %}
+    name: Groom release branch
+    needs: [setup, ensure-release-branch]
     uses: {{ github_username }}/github-infra/.github/workflows/prepare-for-release.yml@main
     with:
       python-version: "{{ min_python }}"
@@ -98,5 +131,5 @@ jobs:
       source-branch: {% raw %}${{ needs.setup.outputs.release_branch }}{% endraw %}
       working-branch: {% raw %}${{ needs.setup.outputs.groom_branch }}{% endraw %}
       pr-base-branch: {% raw %}${{ needs.setup.outputs.release_branch }}{% endraw %}
-      run-doc-generator: {% raw %}${{ needs.setup.outputs.release_type == 'major' }}{% endraw %}
+      run-doc-generator: true
     secrets: inherit

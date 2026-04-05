@@ -21,7 +21,7 @@ fingerprints/
   standardize-coding-practices.md← enforce naming, typing, guard-clause conventions
 .github/
   workflows/
-    dispatch-template-updates.yml ← reusable owner-side tag fan-out
+    dispatch-template-updates.yml ← owner-side fan-out on pushes to main
     prepare-for-release.yml← reusable: orchestrate release cleanup passes
     run-pytest.yml         ← reusable: run pytest on a chosen ref
     llm-task.yml           ← reusable: run one fingerprint pass
@@ -55,8 +55,8 @@ jobs:
 
 ### `run-pytest.yml` — reusable release-line test job
 
-Runs `pytest` for a chosen ref. Use it on every push to `release/**`, and again
-before publishing a release.
+Runs `pytest` for a chosen ref. Use it whenever you want an explicit test gate,
+such as before publishing a release tag.
 
 ```yaml
 jobs:
@@ -95,18 +95,20 @@ this repo's root. Mix and match any combination:
 # .github/workflows/release.yml
 name: Prepare Release Branch
 on:
-  push:
-    branches: ["release/**"]
+  workflow_dispatch:
+    inputs:
+      dev-branch:
+        required: true
+      version:
+        required: true
 jobs:
   review:
     uses: importt-ant/github-infra/.github/workflows/prepare-for-release.yml@main
     with:
       python-version: "3.12"
-      source-branch: ${{ github.ref_name }}
-      working-branch: groom/release-${{ github.ref_name }}
-      pr-base-branch: ${{ github.ref_name }}
-
-      # Choose which tasks to run — order matters (output of each feeds the next).
+      source-branch: release/${{ inputs.version }}
+      working-branch: groom/release-${{ inputs.version }}
+      pr-base-branch: release/${{ inputs.version }}
       fingerprints: |
         fingerprints/standardize-docstrings.md
         fingerprints/standardize-comments.md
@@ -114,13 +116,10 @@ jobs:
     secrets: inherit
 ```
 
-**Release-type examples:**
-
-| Branch / scenario | Fingerprints to use |
-|---|---|
-| Full release (`release/2.0.0`) | all three |
-| Minor release (`release/2.1.0`) | `standardize-coding-practices.md` only |
-| Quick doc fix | `standardize-docstrings.md` only |
+The project-level release workflow is now manual-only. It creates
+`release/x.y.z` from the chosen `dev/x.y` branch when needed, refuses to
+recreate a deleted or already-published release line, and then runs the full
+grooming stack for every release.
 
 **Optional inputs:**
 
@@ -197,17 +196,18 @@ Update an existing project after template changes:
 copier update
 ```
 
-### Automatic template sync on infra tags
+### Automatic template sync on infra pushes to main
 
 Each templated repo can include a `sync-template.yml` workflow that listens for
 the `github-infra-template-update` repository-dispatch event and runs:
 
 ```bash
-copier update --trust --defaults --vcs-ref <tag-or-ref>
+copier update --trust --defaults --vcs-ref <commit-sha-or-ref>
 ```
 
-The owner-side workflow in `github-infra` fans this event out whenever a new
-tag is pushed. To enable that fan-out, add a secret named
+The owner-side workflow in `github-infra` now fans this event out on every push
+to `main`, using the newest `main` commit SHA as the Copier ref. To enable that
+fan-out, add a secret named
 `TEMPLATE_SYNC_TOKEN` to `github-infra` with permission to dispatch workflow
 events to your downstream repositories.
 

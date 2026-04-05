@@ -106,10 +106,27 @@ jobs:
   publish-to-pypi:
     name: Publish to PyPI
     needs: [setup, create-release]
-    uses: {{ github_username }}/github-infra/.github/workflows/publish-to-pypi.yml@main
-    with:
-      python-version: "{{ min_python }}"
-    secrets: inherit
+    runs-on: ubuntu-latest
+    environment: pypi
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: {% raw %}${{ secrets.TEMPLATE_SYNC_TOKEN != '' && secrets.TEMPLATE_SYNC_TOKEN || github.token }}{% endraw %}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "{{ min_python }}"
+
+      - name: Install build
+        run: pip install build
+
+      - name: Build package
+        run: python -m build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
 
   open-merge-prs:
     name: Open merge PRs

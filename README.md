@@ -27,7 +27,7 @@ fingerprints/
     ruff.yml               ← reusable: fix + format
     generate-docs.yml      ← reusable: regenerate docs/
     open-pr.yml            ← reusable: open/update the PR
-    publish-to-pypi.yml    ← reusable: publish to PyPI
+    publish-to-pypi.yml    ← legacy reusable publish workflow
 template/                  ← Copier project template
 ```
 
@@ -37,17 +37,20 @@ template/                  ← Copier project template
 
 ### `publish-to-pypi.yml` — publish a released build to PyPI
 
-Called from the manual release workflow after the GitHub release is created.
-Builds the package and publishes it to PyPI via Trusted Publisher.
+Legacy workflow.
+
+PyPI Trusted Publishing does not reliably support reusable workflows, so the
+Copier template does **not** use this workflow for releases. The template
+defines the publish job directly inside the repo-local `tag.yml` workflow so
+Trusted Publisher claims match the project repository.
 
 ```yaml
-# inside .github/workflows/tag.yml
+# preferred: define the publish job directly in the project repo workflow
+# .github/workflows/tag.yml
 jobs:
-  publish:
-    uses: importt-ant/github-infra/.github/workflows/publish-to-pypi.yml@main
-    with:
-      python-version: "3.12"
-    secrets: inherit
+  publish-to-pypi:
+    runs-on: ubuntu-latest
+    environment: pypi
 ```
 
 ---
@@ -77,7 +80,7 @@ jobs:
   1. runs `pytest`
   2. creates and pushes tag `vX.Y.Z`
   3. creates the GitHub release
-  4. publishes to PyPI
+  4. publishes to PyPI from the repo-local workflow file
   5. opens PRs from `release/x.y.z` into `main` and `dev/x.y`
 
 ---

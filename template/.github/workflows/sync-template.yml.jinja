@@ -54,8 +54,50 @@ jobs:
 
           echo "enabled=true" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve template ref
+        if: steps.setup.outputs.enabled == 'true'
+        id: ref
+        env:
+          EVENT_TEMPLATE_REF: {% raw %}${{ github.event.client_payload.template_ref || '' }}{% endraw %}
+          INPUT_TEMPLATE_REF: {% raw %}${{ github.event.inputs['template-ref'] || '' }}{% endraw %}
+        run: |
+          TEMPLATE_REF="${EVENT_TEMPLATE_REF:-$INPUT_TEMPLATE_REF}"
+          TEMPLATE_REF="${TEMPLATE_REF:-main}"
+
+          if printf '%s' "$TEMPLATE_REF" | grep -Eq '^[0-9a-f]{40}$'; then
+            TEMPLATE_SHA="$TEMPLATE_REF"
+          else
+            TEMPLATE_SHA=$(git ls-remote https://github.com/{{ github_username }}/github-infra.git "$TEMPLATE_REF" | awk 'NR==1 {print $1}')
+          fi
+
+          if [ -z "$TEMPLATE_SHA" ]; then
+            echo "Could not resolve github-infra ref: $TEMPLATE_REF" >&2
+            exit 1
+          fi
+
+          SHORT_SHA="$(printf '%s' "$TEMPLATE_SHA" | cut -c1-12)"
+          BRANCH="chore/template-sync-${SHORT_SHA}"
+          echo "template_ref=${TEMPLATE_REF}" >> "$GITHUB_OUTPUT"
+          echo "template_sha=${TEMPLATE_SHA}" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "branch=${BRANCH}" >> "$GITHUB_OUTPUT"
+
+      - name: Create sync branch
+        if: steps.setup.outputs.enabled == 'true'
+        id: branch
+        env:
+          BRANCH: {% raw %}${{ steps.ref.outputs.branch }}{% endraw %}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          START_SHA="$(git rev-parse HEAD)"
+          git switch -C "$BRANCH"
+          echo "start_sha=${START_SHA}" >> "$GITHUB_OUTPUT"
+
       - name: Normalize copier source
         if: steps.setup.outputs.enabled == 'true'
+        env:
+          TEMPLATE_SHA: {% raw %}${{ steps.ref.outputs.template_sha }}{% endraw %}
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -77,19 +119,10 @@ jobs:
               path.write_text('\n'.join(updated) + '\n', encoding='utf-8')
           PY
 
-      - name: Resolve template ref
-        if: steps.setup.outputs.enabled == 'true'
-        id: ref
-        env:
-          EVENT_TEMPLATE_REF: {% raw %}${{ github.event.client_payload.template_ref || '' }}{% endraw %}
-          INPUT_TEMPLATE_REF: {% raw %}${{ github.event.inputs['template-ref'] || '' }}{% endraw %}
-        run: |
-          TEMPLATE_REF="${EVENT_TEMPLATE_REF:-$INPUT_TEMPLATE_REF}"
-          TEMPLATE_REF="${TEMPLATE_REF:-main}"
-          SAFE_REF=$(printf '%s' "$TEMPLATE_REF" | tr '/:@ ' '-' | tr -cd '[:alnum:]._-')
-          SAFE_REF="${SAFE_REF:-main}"
-          echo "template_ref=${TEMPLATE_REF}" >> "$GITHUB_OUTPUT"
-          echo "safe_ref=${SAFE_REF}" >> "$GITHUB_OUTPUT"
+          if [ -n "$(git status --porcelain .copier-answers.yml)" ]; then
+            git add .copier-answers.yml
+            git commit -m "chore(template): normalize copier source ${TEMPLATE_SHA} [skip ci]"
+          fi
 
       - name: Run copier update
         if: steps.setup.outputs.enabled == 'true'
@@ -102,21 +135,21 @@ jobs:
         if: steps.setup.outputs.enabled == 'true'
         id: commit
         env:
-          TEMPLATE_REF: {% raw %}${{ steps.ref.outputs.template_ref }}{% endraw %}
-          SAFE_REF: {% raw %}${{ steps.ref.outputs.safe_ref }}{% endraw %}
+          SHORT_SHA: {% raw %}${{ steps.ref.outputs.short_sha }}{% endraw %}
+          BRANCH: {% raw %}${{ steps.ref.outputs.branch }}{% endraw %}
+          START_SHA: {% raw %}${{ steps.branch.outputs.start_sha }}{% endraw %}
         run: |
-          if [ -z "$(git status --porcelain)" ]; then
+          if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit -m "chore(template): sync github-infra ${SHORT_SHA} [skip ci]"
+          fi
+
+          if [ "$(git rev-parse HEAD)" = "$START_SHA" ]; then
             echo "No template changes."
             echo "branch=" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          BRANCH="chore/template-sync-${SAFE_REF}"
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git switch -C "$BRANCH"
-          git add -A
-          git commit -m "chore(template): sync github-infra ${TEMPLATE_REF} [skip ci]"
           git push --force-with-lease origin "$BRANCH"
           echo "branch=${BRANCH}" >> "$GITHUB_OUTPUT"
 
@@ -126,6 +159,8 @@ jobs:
           GH_TOKEN: {% raw %}${{ secrets.GITHUB_TOKEN }}{% endraw %}
           BRANCH: {% raw %}${{ steps.commit.outputs.branch }}{% endraw %}
           TEMPLATE_REF: {% raw %}${{ steps.ref.outputs.template_ref }}{% endraw %}
+          TEMPLATE_SHA: {% raw %}${{ steps.ref.outputs.template_sha }}{% endraw %}
+          SHORT_SHA: {% raw %}${{ steps.ref.outputs.short_sha }}{% endraw %}
           BASE_BRANCH: {% raw %}${{ github.event.repository.default_branch }}{% endraw %}
         run: |
           EXISTING=$(gh pr list --head "$BRANCH" --base "$BASE_BRANCH" --json url --jq '.[0].url' 2>/dev/null || true)
@@ -138,6 +173,8 @@ jobs:
 
           This PR updates the repository from the latest `github-infra` Copier template ref: `${TEMPLATE_REF}`.
 
+          - resolved commit: `${TEMPLATE_SHA}`
+
           ### What ran
           - normalized `.copier-answers.yml` to use the remote template source
           - ran `copier update --trust --defaults --vcs-ref ${TEMPLATE_REF}`
@@ -146,7 +183,7 @@ jobs:
           EOF
             )
             gh pr create \
-              --title "chore(template): sync github-infra ${TEMPLATE_REF}" \
+              --title "chore(template): sync github-infra ${SHORT_SHA}" \
               --body "$BODY" \
               --base "$BASE_BRANCH" \
               --head "$BRANCH"

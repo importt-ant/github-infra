@@ -17,6 +17,7 @@ class Fingerprint:
     path: Path
     task_name: str
     file_patterns: list[str]
+    exclude_patterns: list[str]
     system_prompt: str
 
 
@@ -64,10 +65,14 @@ def load_fingerprint(path: Path) -> Fingerprint:
     patterns = meta.get("file_patterns", ["*.py"])
     if isinstance(patterns, str):
         patterns = [patterns]
+    exclude_patterns = meta.get("exclude_patterns", [])
+    if isinstance(exclude_patterns, str):
+        exclude_patterns = [exclude_patterns]
 
     return Fingerprint(
         path=path,
         task_name=task_name,
         file_patterns=list(patterns),
+        exclude_patterns=list(exclude_patterns),
         system_prompt=body.strip(),
     )

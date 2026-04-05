@@ -23,11 +23,14 @@ re-read before every pass so the output of task N feeds task N+1.
     task_name: "Update NumPy docstrings"
     file_patterns:
       - "*.py"
+        exclude_patterns:
+            - "__init__.py"
     ---
     You are a Python documentation expert ...
     [rest of system prompt]
 
 ``file_patterns`` uses ``fnmatch`` globs applied to filenames (not full paths).
+Use ``exclude_patterns`` to skip risky filenames such as ``__init__.py``.
 List multiple patterns to match several file types.
 
 ─── Environment ──────────────────────────────────────────────────────────────
@@ -124,9 +127,18 @@ def main() -> None:
         print(f"─── Task: {fingerprint.task_name} ({'|'.join(fingerprint.file_patterns)}) ───")
 
         if args.changed_only:
-            files = collect_changed_files(src, fingerprint.file_patterns, args.base)
+            files = collect_changed_files(
+                src,
+                fingerprint.file_patterns,
+                args.base,
+                exclude_patterns=fingerprint.exclude_patterns,
+            )
         else:
-            files = collect_all_files(src, fingerprint.file_patterns)
+            files = collect_all_files(
+                src,
+                fingerprint.file_patterns,
+                exclude_patterns=fingerprint.exclude_patterns,
+            )
 
         if not files:
             print("  No matching files — skipping.\n")

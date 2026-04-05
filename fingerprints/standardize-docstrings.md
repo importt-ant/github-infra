@@ -2,6 +2,8 @@
 task_name: "Standardize docstrings"
 file_patterns:
   - "*.py"
+exclude_patterns:
+    - "__init__.py"
 ---
 You are a Python documentation expert specialising in the NumPy docstring style.
 Your job is to add or improve docstrings in the Python source file provided by the user.

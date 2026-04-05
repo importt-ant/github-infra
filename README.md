@@ -142,6 +142,8 @@ with YAML front-matter followed by the system prompt:
 task_name: "Update NumPy docstrings"
 file_patterns:
   - "*.py"
+exclude_patterns:
+  - "__init__.py"
 ---
 You are a Python documentation expert ...
 ```
@@ -150,6 +152,9 @@ Add new fingerprints under `fingerprints/` and reference them by path in any
 project's workflow. The runner processes files changed in the PR diff only
 (`--changed-only`), so large repos stay within the GitHub Models free-tier
 rate limits (150 requests/day for `gpt-4o-mini`).
+
+Use `exclude_patterns` for files that are structurally risky to rewrite, such
+as `__init__.py` export modules.
 
 Current built-in fingerprints:
 

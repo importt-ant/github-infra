@@ -11,14 +11,38 @@ def _matches(path: Path, patterns: list[str]) -> bool:
     return any(fnmatch.fnmatch(path.name, pattern) for pattern in patterns)
 
 
-def collect_all_files(src: Path, patterns: list[str]) -> list[Path]:
+def _is_excluded(path: Path, patterns: list[str]) -> bool:
+    """Return True if *path* matches any exclude pattern by filename or path."""
+    path_text = path.as_posix()
+    return any(
+        fnmatch.fnmatch(path.name, pattern) or fnmatch.fnmatch(path_text, pattern)
+        for pattern in patterns
+    )
+
+
+def collect_all_files(
+    src: Path,
+    patterns: list[str],
+    exclude_patterns: list[str] | None = None,
+) -> list[Path]:
     """Return all files under *src* matching *patterns*."""
-    return sorted(path for path in src.rglob("*") if path.is_file() and _matches(path, patterns))
+    excluded = exclude_patterns or []
+    return sorted(
+        path
+        for path in src.rglob("*")
+        if path.is_file() and _matches(path, patterns) and not _is_excluded(path, excluded)
+    )
 
 
-def collect_changed_files(src: Path, patterns: list[str], base: str) -> list[Path]:
+def collect_changed_files(
+    src: Path,
+    patterns: list[str],
+    base: str,
+    exclude_patterns: list[str] | None = None,
+) -> list[Path]:
     """Return files under *src* that differ from *base* and match *patterns*."""
     repo_root = Path.cwd()
+    excluded = exclude_patterns or []
     try:
         result = subprocess.run(
             [
@@ -44,7 +68,7 @@ def collect_changed_files(src: Path, patterns: list[str], base: str) -> list[Pat
         if not line:
             continue
         path = repo_root / line
-        if path.is_file() and _matches(path, patterns):
+        if path.is_file() and _matches(path, patterns) and not _is_excluded(path, excluded):
             paths.append(path)
 
     return sorted(paths)

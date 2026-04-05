@@ -18,7 +18,6 @@ scripts/
 fingerprints/
   standardize-docstrings.md      ← rewrite docstrings to NumPy style
   standardize-comments.md        ← standardise inline comments
-  standardize-coding-practices.md← enforce naming, typing, guard-clause conventions
 .github/
   workflows/
     dispatch-template-updates.yml ← owner-side fan-out on pushes to main
@@ -112,7 +111,6 @@ jobs:
       fingerprints: |
         fingerprints/standardize-docstrings.md
         fingerprints/standardize-comments.md
-        fingerprints/standardize-coding-practices.md
     secrets: inherit
 ```
 
@@ -157,7 +155,6 @@ Current built-in fingerprints:
 
 - `fingerprints/standardize-docstrings.md`
 - `fingerprints/standardize-comments.md`
-- `fingerprints/standardize-coding-practices.md`
 
 ---
 

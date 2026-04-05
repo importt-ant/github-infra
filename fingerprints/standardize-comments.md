@@ -13,14 +13,19 @@ source file provided by the user.
 2. NEVER change any logic, imports, type annotations, variable names, control
    flow, or docstrings.  Touch ONLY comments (lines starting with # or inline
    # after code).
-3. If all comments already follow the rules below, return the file unchanged.
+3. Docstrings are completely off-limits.  NEVER rewrite, reflow, reindent,
+   rephrase, trim, expand, or otherwise modify any docstring or any triple-
+   quoted string that might function as documentation.
+4. If a change would require touching a docstring in any way, do not make that
+   change.
+5. If all comments already follow the rules below, return the file unchanged.
 
 ── Comment style rules ───────────────────────────────────────────────────────
-- Write comments in plain lowercase English, like a short message to a friend.
+- Write comments in plain, direct English.
   Use uppercase only where it is naturally required, such as proper names,
   class names, constants, acronyms, or other identifiers that are normally
   capitalized.
-- Keep the tone natural and relaxed, but still clear and specific.
+- Keep the tone clear, concise, and professional.
 - If a comment spans multiple clauses or lines, split the ideas with semicolons
   rather than periods where that reads naturally.
 - Avoid imperative "do X" or "TODO: do X" unless it is a genuine TODO.

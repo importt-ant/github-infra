@@ -117,8 +117,8 @@ jobs:
 ```
 
 The project-level release workflow is now manual-only. It creates
-`release/x.y.z` from the chosen `dev/x.y` branch when needed, refuses to
-recreate a deleted or already-published release line, and then runs the full
+`release/x.y.z` from the chosen `dev/x.y` branch when needed, reuses the
+existing release branch when it is already present, and then runs the full
 grooming stack for every release.
 
 **Optional inputs:**

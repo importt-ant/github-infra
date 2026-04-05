@@ -83,37 +83,12 @@ jobs:
 
       - name: Create or reuse release branch
         env:
-          GH_TOKEN: {% raw %}${{ secrets.TEMPLATE_SYNC_TOKEN != '' && secrets.TEMPLATE_SYNC_TOKEN || github.token }}{% endraw %}
-          VERSION: {% raw %}${{ needs.setup.outputs.version }}{% endraw %}
           DEV_BRANCH: {% raw %}${{ needs.setup.outputs.dev_branch }}{% endraw %}
           RELEASE_BRANCH: {% raw %}${{ needs.setup.outputs.release_branch }}{% endraw %}
         run: |
           if git ls-remote --exit-code --heads origin "refs/heads/${RELEASE_BRANCH}" >/dev/null 2>&1; then
             echo "Release branch already exists on origin: ${RELEASE_BRANCH}"
             exit 0
-          fi
-
-          TAG="v${VERSION}"
-          PR_COUNT=$(gh pr list \
-            --state all \
-            --head "$RELEASE_BRANCH" \
-            --json number \
-            --jq 'length' 2>/dev/null || echo 0)
-
-          if [ "$PR_COUNT" != "0" ]; then
-            echo "Release branch ${RELEASE_BRANCH} appears to have existed before (found ${PR_COUNT} PRs)." >&2
-            echo "Refusing to recreate a deleted or merged release branch." >&2
-            exit 1
-          fi
-
-          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
-            echo "Tag ${TAG} already exists; refusing to recreate ${RELEASE_BRANCH}." >&2
-            exit 1
-          fi
-
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "GitHub release ${TAG} already exists; refusing to recreate ${RELEASE_BRANCH}." >&2
-            exit 1
           fi
 
           git fetch origin "$DEV_BRANCH" --no-tags

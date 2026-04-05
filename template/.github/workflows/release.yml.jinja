@@ -79,10 +79,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: {% raw %}${{ secrets.TEMPLATE_SYNC_TOKEN != '' && secrets.TEMPLATE_SYNC_TOKEN || github.token }}{% endraw %}
 
       - name: Create or reuse release branch
         env:
-          GH_TOKEN: {% raw %}${{ secrets.GITHUB_TOKEN }}{% endraw %}
+          GH_TOKEN: {% raw %}${{ secrets.TEMPLATE_SYNC_TOKEN != '' && secrets.TEMPLATE_SYNC_TOKEN || github.token }}{% endraw %}
           VERSION: {% raw %}${{ needs.setup.outputs.version }}{% endraw %}
           DEV_BRANCH: {% raw %}${{ needs.setup.outputs.dev_branch }}{% endraw %}
           RELEASE_BRANCH: {% raw %}${{ needs.setup.outputs.release_branch }}{% endraw %}

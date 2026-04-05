@@ -31,10 +31,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.TEMPLATE_SYNC_TOKEN != '' && secrets.TEMPLATE_SYNC_TOKEN || github.token }}
 
       - name: Open pull request
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.TEMPLATE_SYNC_TOKEN != '' && secrets.TEMPLATE_SYNC_TOKEN || github.token }}
           FINGERPRINTS: ${{ inputs.fingerprints }}
           HEAD_BRANCH: ${{ inputs.head-branch != '' && inputs.head-branch || github.ref_name }}
           PR_TITLE: ${{ inputs.title }}
@@ -44,13 +46,27 @@ jobs:
 
           if [ -n "$EXISTING" ]; then
             echo "PR already exists: $EXISTING"
-          else
-            TASK_LIST=$(printf '%s\n' "$FINGERPRINTS" | grep -v '^\s*$' | sed 's/^/- /')
-            BODY=$(cat <<EOF
+            exit 0
+          fi
+
+          TASK_LIST=$(printf '%s\n' "$FINGERPRINTS" | grep -v '^\s*$' | sed 's/^/- /')
+
+          if [ -z "$TASK_LIST" ]; then
+            TASK_LIST='- automated repository grooming'
+          fi
+
+          BODY=$(cat <<EOF
           ## Automated review pass
 
           This PR was opened by the **LLM Code Tasks** workflow.
 
           ### Tasks run
           ${TASK_LIST}
-          fi
+          EOF
+          )
+
+          gh pr create \
+            --head "$HEAD_BRANCH" \
+            --base "${{ inputs.base-branch }}" \
+            --title "$TITLE" \
+            --body "$BODY"

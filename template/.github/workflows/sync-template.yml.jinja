@@ -27,6 +27,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: {% raw %}${{ secrets.TEMPLATE_SYNC_TOKEN != '' && secrets.TEMPLATE_SYNC_TOKEN || github.token }}{% endraw %}
 
       - uses: actions/setup-python@v5
         with:
@@ -154,7 +155,7 @@ jobs:
       - name: Open pull request
         if: steps.commit.outputs.branch != ''
         env:
-          GH_TOKEN: {% raw %}${{ secrets.GITHUB_TOKEN }}{% endraw %}
+          GH_TOKEN: {% raw %}${{ secrets.TEMPLATE_SYNC_TOKEN != '' && secrets.TEMPLATE_SYNC_TOKEN || github.token }}{% endraw %}
           BRANCH: {% raw %}${{ steps.commit.outputs.branch }}{% endraw %}
           TEMPLATE_REF: {% raw %}${{ steps.ref.outputs.template_ref }}{% endraw %}
           TEMPLATE_SHA: {% raw %}${{ steps.ref.outputs.template_sha }}{% endraw %}

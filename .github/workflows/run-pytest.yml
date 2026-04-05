@@ -33,6 +33,7 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ inputs.checkout-ref != '' && inputs.checkout-ref || github.ref_name }}
+          token: ${{ secrets.TEMPLATE_SYNC_TOKEN != '' && secrets.TEMPLATE_SYNC_TOKEN || github.token }}
 
       - uses: actions/setup-python@v5
         with:

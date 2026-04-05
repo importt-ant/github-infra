@@ -211,3 +211,13 @@ fan-out, add a secret named
 `TEMPLATE_SYNC_TOKEN` to `github-infra` with permission to dispatch workflow
 events to your downstream repositories.
 
+If a downstream template sync may update files under `.github/workflows/`, add a
+repository secret with the same name, `TEMPLATE_SYNC_TOKEN`, to that downstream
+repo as well. Use a token that can push workflow-file changes and open pull
+requests for that repository.
+
+The reusable workflows in `github-infra` now prefer that same
+`TEMPLATE_SYNC_TOKEN` for repository checkouts, branch pushes, and pull-request
+creation, including the manual release-branch preparation flow. When the secret
+is absent, they fall back to the default workflow token.
+

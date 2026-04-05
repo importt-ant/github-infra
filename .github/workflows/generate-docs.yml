@@ -32,6 +32,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.TEMPLATE_SYNC_TOKEN != '' && secrets.TEMPLATE_SYNC_TOKEN || github.token }}
 
       - name: Select working branch
         env:
@@ -52,7 +53,7 @@ jobs:
           repository: importt-ant/github-infra
           ref: main
           path: .infra
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.TEMPLATE_SYNC_TOKEN != '' && secrets.TEMPLATE_SYNC_TOKEN || github.token }}
 
       - uses: actions/setup-python@v5
         with:

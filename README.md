@@ -153,8 +153,9 @@ project's workflow. The runner processes files changed in the PR diff only
 (`--changed-only`), so large repos stay within the GitHub Models free-tier
 rate limits (150 requests/day for `gpt-4o-mini`).
 
-Use `exclude_patterns` for files that are structurally risky to rewrite, such
-as `__init__.py` export modules.
+The runner always skips `__init__.py` files globally.
+Use `exclude_patterns` for additional files that are structurally risky to
+rewrite.
 
 Current built-in fingerprints:
 

@@ -30,7 +30,8 @@ re-read before every pass so the output of task N feeds task N+1.
     [rest of system prompt]
 
 ``file_patterns`` uses ``fnmatch`` globs applied to filenames (not full paths).
-Use ``exclude_patterns`` to skip risky filenames such as ``__init__.py``.
+The runner always skips ``__init__.py`` files globally.
+Use ``exclude_patterns`` to skip additional risky filenames or paths.
 List multiple patterns to match several file types.
 
 ─── Environment ──────────────────────────────────────────────────────────────

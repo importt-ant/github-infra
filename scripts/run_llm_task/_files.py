@@ -5,6 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+_ALWAYS_EXCLUDED_FILENAMES = {"__init__.py"}
+
 
 def _matches(path: Path, patterns: list[str]) -> bool:
     """Return True if *path*'s filename matches any of *patterns*."""
@@ -13,6 +15,9 @@ def _matches(path: Path, patterns: list[str]) -> bool:
 
 def _is_excluded(path: Path, patterns: list[str]) -> bool:
     """Return True if *path* matches any exclude pattern by filename or path."""
+    if path.name in _ALWAYS_EXCLUDED_FILENAMES:
+        return True
+
     path_text = path.as_posix()
     return any(
         fnmatch.fnmatch(path.name, pattern) or fnmatch.fnmatch(path_text, pattern)

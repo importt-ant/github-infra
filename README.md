@@ -167,7 +167,7 @@ Current built-in fingerprints:
 ## Copier template
 
 Scaffolds a new `importt-ant` Python library with `pyproject.toml`,
-`.gitignore`, and branch-oriented workflow callers pre-configured.
+`LICENSE`, `.gitignore`, and branch-oriented workflow callers pre-configured.
 
 ```bash
 pip install copier

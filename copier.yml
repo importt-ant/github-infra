@@ -64,6 +64,25 @@ min_python:
     - "3.13"
   default: "3.12"
 
+keywords:
+  type: yaml
+  help: |-
+    PyPI keywords as a YAML list of strings.  Leave empty ([]) for none.
+
+    Example:
+      ["generator", "seeded", "sqlite"]
+  default: "[]"
+
+dependencies:
+  type: yaml
+  help: |-
+    Core runtime dependencies as a YAML list of PEP 508 requirement strings.
+    Leave empty ([]) for none.
+
+    Example:
+      ["requests>=2.31", "pydantic>=2.0"]
+  default: "[]"
+
 optional_extras:
   type: yaml
   help: |-
@@ -74,3 +93,22 @@ optional_extras:
       sobol: ["scipy>=1.12"]
       plot:  ["matplotlib>=3.8", "seaborn"]
   default: "{}"
+
+license:
+  type: str
+  help: "Project license"
+  choices:
+    - "MIT"
+    - "Apache-2.0"
+    - "GPL-3.0-only"
+    - "BSD-3-Clause"
+  default: "MIT"
+
+topic_classifiers:
+  type: yaml
+  help: |-
+    Additional PyPI topic classifiers as a YAML list.  Leave empty ([]) for none.
+
+    Example:
+      ["Topic :: Software Development :: Libraries"]
+  default: "[]"

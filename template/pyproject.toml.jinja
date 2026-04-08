@@ -7,23 +7,40 @@ name = "{{ project_name }}"
 dynamic = ["version"]
 description = "{{ description }}"
 readme = "README.md"
-license = {text = "MIT"}
+license = {text = "{{ license }}"}
 requires-python = ">={{ min_python }}"
 authors = [
     {name = "{{ author_name }}", email = "{{ author_email }}"},
 ]
-keywords = []
+keywords = [
+{%- for kw in keywords %}
+    "{{ kw }}",
+{%- endfor %}
+]
 classifiers = [
     "Development Status :: {{ development_status }}",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
+{%- set _license_classifiers = {
+    "MIT": "License :: OSI Approved :: MIT License",
+    "Apache-2.0": "License :: OSI Approved :: Apache Software License",
+    "GPL-3.0-only": "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "BSD-3-Clause": "License :: OSI Approved :: BSD License",
+} %}
+    "{{ _license_classifiers[license] }}",
     "Programming Language :: Python :: 3",
 {%- set _all_python = ["3.10", "3.11", "3.12", "3.13"] %}
 {%- for v in _all_python if v >= min_python %}
     "Programming Language :: Python :: {{ v }}",
 {%- endfor %}
+{%- for cls in topic_classifiers %}
+    "{{ cls }}",
+{%- endfor %}
 ]
-dependencies = []
+dependencies = [
+{%- for dep in dependencies %}
+    "{{ dep }}",
+{%- endfor %}
+]
 
 [project.optional-dependencies]
 {%- if optional_extras %}

@@ -3,10 +3,6 @@ name: Open PR
 on:
   workflow_call:
     inputs:
-      fingerprints:
-        description: "Newline-separated list of fingerprint file paths"
-        type: string
-        default: ""
       head-branch:
         description: "Head branch for the pull request"
         type: string
@@ -37,31 +33,21 @@ jobs:
       - name: Open pull request
         env:
           GH_TOKEN: ${{ secrets.TEMPLATE_SYNC_TOKEN != '' && secrets.TEMPLATE_SYNC_TOKEN || github.token }}
-          FINGERPRINTS: ${{ inputs.fingerprints }}
           HEAD_BRANCH: ${{ inputs.head-branch != '' && inputs.head-branch || github.ref_name }}
           PR_TITLE: ${{ inputs.title }}
         run: |
           EXISTING=$(gh pr list --head "$HEAD_BRANCH" --base "${{ inputs.base-branch }}" --json url --jq '.[0].url' 2>/dev/null || true)
-          TITLE="${PR_TITLE:-chore: LLM review pass (${HEAD_BRANCH})}"
+          TITLE="${PR_TITLE:-chore: automated updates (${HEAD_BRANCH})}"
 
           if [ -n "$EXISTING" ]; then
             echo "PR already exists: $EXISTING"
             exit 0
           fi
 
-          TASK_LIST=$(printf '%s\n' "$FINGERPRINTS" | grep -v '^\s*$' | sed 's/^/- /')
-
-          if [ -z "$TASK_LIST" ]; then
-            TASK_LIST='- automated repository grooming'
-          fi
-
           BODY=$(cat <<EOF
-          ## Automated review pass
+          ## Automated updates
 
-          This PR was opened by the **LLM Code Tasks** workflow.
-
-          ### Tasks run
-          ${TASK_LIST}
+          This PR was opened automatically.
           EOF
           )
 

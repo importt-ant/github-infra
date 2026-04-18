@@ -2,11 +2,11 @@ name: Publish to PyPI
 
 # ── Reusable workflow ─────────────────────────────────────────────────────────
 #
-# Legacy reusable publish workflow.
+# Reusable publish workflow.
 #
-# PyPI Trusted Publishing does not reliably support reusable workflows, so the
-# Copier template now defines the publish job directly in the repo-local
-# tag.yml workflow. Keep this file only for non-template or experimental uses.
+# Note: PyPI Trusted Publishing does not reliably support reusable workflows,
+# so you may need to define the publish job directly in your repo-local
+# workflow instead.
 #
 # Requires a PyPI Trusted Publisher configured for your project:
 #   https://docs.pypi.org/trusted-publishers/
